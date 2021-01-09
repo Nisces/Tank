@@ -4,8 +4,7 @@
 class BulletErase : public GameObject
 {
 public:
-	BulletErase(Position pos, Size size, int damage = 0);     //±¨’®Œª÷√  
+	BulletErase(Position pos, Size size ,float rotation);     //±¨’®Œª÷√  
 	bool draw(SpriteRenderer& renderer);
 	int count;
-	int damage = 0;
 };

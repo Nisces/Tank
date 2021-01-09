@@ -13,7 +13,8 @@ public:
 	~Game();
 	void init();
 	int update(float dt);
-	int updateBonus(float dt);
+	void spawnBonus(GameObject& obj);
+	void updateBonus(float dt);
 	int render();
 	void processInput(float dt);
 	bool keys[1024] = { false };
@@ -29,8 +30,8 @@ public:
 	vector<BulletErase> bulleterase;
 	vector<Tank> enemyTanks;
 	vector<GameLevel> levels;
-	void drawUI();
 	vector<Bonus> bonusItems;
+	void drawUI();
 	unsigned int level;
 	unsigned int lvlHeight = 1000, lvlWidth = 1000;
 	Size viewSize;

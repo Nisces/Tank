@@ -21,6 +21,7 @@ public:
 	float speed;
 	int blood;
 	int attacked;
+	bool armor = false;
 	bool stop = false;
 	int frame = 0;
 };

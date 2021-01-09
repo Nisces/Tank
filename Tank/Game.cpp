@@ -93,6 +93,10 @@ void Game::init()
 	ResourceManager::loadTexture("resource/texture/Effects/Flash_A_04.png", "BE1");
 	ResourceManager::loadTexture("resource/texture/Effects/Flash_A_05.png", "BE2");
 
+	ResourceManager::loadTexture("resource/texture/Bonus_Items/Speed_Bonus.png", "FAST");
+	ResourceManager::loadTexture("resource/texture/Bonus_Items/HP_Bonus.png", "BLOOD");
+	ResourceManager::loadTexture("resource/texture/Bonus_Items/Shield_Bonus.png", "ARMOR");
+
 
 	//加载关卡
 	GameLevel one; one.load("resource/levels/one2.lvl", lvlWidth, lvlHeight); one.tanks = 20;
@@ -202,10 +206,33 @@ int Game::update(float dt)
 		int base = rand() % levels[level].tankBase.size();
 		enemyTanks.push_back(Tank(levels[level].tankBase[base].pos));
 		lastEnemyTime = currentTime;
+		levels[level].tanks--;
 	}
 
 	//AIController::AI(*this, dt);
 
+
+	for (auto& it : this->bonusItems)
+	{
+		if (it.obtainable && !it.activated && CheckCollision(*player, it))
+		{
+			it.activated = true;
+			if (it.type == "FAST")
+			{
+				player->speed *= 1.2;
+			}
+			else if (it.type == "BLOOD")
+			{
+				player->blood = 1000;
+			}
+			else if (it.type == "ARMOR")
+			{
+				player->armor = true;
+			}
+		}
+	}
+
+	this->updateBonus(dt);
 
 	//子弹飞行过程及碰撞检测
 	for (auto it = bullets.begin(); it != bullets.end();)
@@ -225,8 +252,8 @@ int Game::update(float dt)
 				{
 					SoundEngine->play2D("resource/sound/Explosion.wav", GL_FALSE);
 					explosions.push_back(Explosion(t->pos + Size(t->size.x / 2, t->size.y / 2) - Size(100 / 2, 100 / 2), Size(100, 100)));
+					this->spawnBonus(*t);   //随机生成道具  加入到bonusItem列表中
 					t = enemyTanks.erase(t);
-					levels[level].tanks--;
 				}
 				break;
 			}
@@ -254,7 +281,7 @@ int Game::update(float dt)
 		}
 		if (hitTank || hitBlock)
 		{
-			bulleterase.push_back(BulletErase(it->pos + Size(it->size.x / 2, it->size.y / 2) - Size(100 / 2, 100 / 2), Size(100, 100), 500));
+			bulleterase.push_back(BulletErase(it->pos + Size(it->size.x / 2, it->size.y / 2) - Size(50 / 2, 50 / 2), Size(50, 50), it->rotation));
 		}
 		if (hitTank || hitBlock || it->biu(dt, glm::vec2(lvlWidth, lvlHeight)))
 		{
@@ -283,7 +310,7 @@ int Game::update(float dt)
 						{
 							if (block.type == BOMBT)
 							{
-								//SoundEngine->play2D("resource/sound/Explosion.wav", GL_FALSE);
+								SoundEngine->play2D("resource/sound/Explosion.wav", GL_FALSE);
 								explosions.push_back(Explosion(block.pos + Size(block.size.x / 2, block.size.y / 2) - Size(100 / 2, 100 / 2), Size(100, 100), 500));
 							}
 						}
@@ -302,7 +329,7 @@ int Game::update(float dt)
 
 	for (auto& be : bulleterase)
 	{
-		if (currentTime - lastbeTime > 0.05)
+		if (currentTime - lastbeTime > 0.04)
 		{
 			be.count++;
 		}
@@ -311,11 +338,25 @@ int Game::update(float dt)
 		[](const BulletErase& be) { return be.count >= 2; }
 	), this->bulleterase.end());
 
+	//道具延时显示时间
+	if (currentTime - lastAnimeTime > 0.03)
+	{
+		for (auto& it : this->bonusItems)
+		{
+			if (!it.obtainable)
+			{
+				it.delay++;
+				if (it.delay >= 9)
+					it.obtainable = true;
+			}
+		}
+	}
+
 	if (currentTime - lastAnimeTime > 0.03)
 	{
 		lastAnimeTime = currentTime;
 	}
-	if (currentTime - lastbeTime > 0.05)
+	if (currentTime - lastbeTime > 0.04)
 	{
 		lastbeTime = currentTime;
 	}
@@ -377,6 +418,14 @@ int Game::render()
 	for (int i = 0; i < bulleterase.size(); ++i)
 	{
 		bulleterase[i].draw(*renderer);
+	}
+
+	for (auto& it : this->bonusItems)
+	{
+		if (it.obtainable && !it.outoftime && !it.activated)  //画出 还没过时且未被激活的道具
+		{
+			it.draw(*renderer);
+		}
 	}
 
 	levels[level].drawTree(*renderer);
@@ -441,4 +490,85 @@ void Game::processInput(float dt)
 	}
 
 	player->turnTo(mousePos / Size(width, height) * viewSize + camPostion);
+}
+
+bool randomSpwan(unsigned int chance)
+{
+	unsigned int random = rand() % chance;
+	return random == 0;
+}
+
+//产生道具
+void Game::spawnBonus(GameObject& obj)
+{
+	if (randomSpwan(3))
+		this->bonusItems.push_back(Bonus("FAST", obj.pos, glm::vec2(50, 50)));
+	else if (randomSpwan(3))
+		this->bonusItems.push_back(Bonus("BLOOD", obj.pos, glm::vec2(50, 50)));
+	else if (randomSpwan(3))
+		this->bonusItems.push_back(Bonus("ARMOR", obj.pos, glm::vec2(50, 50)));
+}
+
+bool isOtherBonusActivate(vector<Bonus>& bonusItem, string type)
+{
+	for (auto& it : bonusItem)
+	{
+		if (it.activated && it.type == type)
+			return true;
+	}
+	return false;
+}
+
+//道具判断
+void Game::updateBonus(float dt)
+{
+	for (auto& it : this->bonusItems)
+	{
+		if (it.activated)  //如果被坦克获得
+		{
+			it.validTime -= dt;  //生效时间
+			if (it.validTime <= 0.0f)  //当失效时
+			{
+				it.runout = true;
+				// deactivate effects
+				if (it.type == "FAST")
+				{
+					if (!isOtherBonusActivate(this->bonusItems, "FAST"))
+					{
+						player->speed /= 1.2;   //恢复原速度
+					}
+				}
+				else if (it.type == "ARMOR")
+				{
+					if (!isOtherBonusActivate(this->bonusItems, "ARMOR"))
+					{
+						player->armor = false;
+					}
+				}
+			}
+		}
+		else  //判断道具是否 过时
+		{
+			it.exitTime -= dt;
+			if (it.exitTime <= 0.0f)
+			{
+				it.outoftime = true;
+			}
+		}
+	}
+	//移除所有已经失效 或者 过时的道具
+	/*this->bonusItems.erase(std::remove_if(this->bonusItems.begin(), this->bonusItems.end(),
+		[](const Bonus &bonus) {return bonus.outoftime && bonus.runout;}
+		), this->bonusItems.end());*/
+	for (auto it = this->bonusItems.begin(); it != this->bonusItems.end();)
+	{
+		if (it->outoftime || it->runout)
+		{
+			bonusItems.erase(it);
+		}
+		else
+		{
+			++it;
+		}
+	}
 }

@@ -2,9 +2,10 @@
 #include "ResourceManager.h"
 #include <iostream>
 
-BulletErase::BulletErase(Position pos, Size size, int damage) : GameObject(pos, size), damage(damage)
+BulletErase::BulletErase(Position pos, Size size, float rotation) : GameObject(pos, size, Velocity(0, 0), rotation)
 {
 	this->count = 0;
+	this->rotation = rotation;
 	this->textures.push_back(ResourceManager::getTexture("BE1"));
 	this->textures.push_back(ResourceManager::getTexture("BE2"));
 }
