@@ -39,10 +39,6 @@ Game::~Game()
 	delete renderer;
 }
 
-void Game::drawUI() {
-	player->blood;
-}
-
 void Game::init()
 {
 	srand(unsigned int(time(NULL)));
@@ -96,6 +92,11 @@ void Game::init()
 	ResourceManager::loadTexture("resource/texture/Bonus_Items/Speed_Bonus.png", "FAST");
 	ResourceManager::loadTexture("resource/texture/Bonus_Items/HP_Bonus.png", "BLOOD");
 	ResourceManager::loadTexture("resource/texture/Bonus_Items/Shield_Bonus.png", "ARMOR");
+
+	ResourceManager::loadTexture("resource/texture/Props/neon fire hud_2.png", "BLOOD");
+	ResourceManager::loadTexture("resource/texture/Props/HB_Frames_0059_Package-----------------.png", "KUANG");
+	ResourceManager::loadTexture("resource/texture/Props/aigei_com.png", "TANKTU");
+
 
 
 	//¼ÓÔØ¹Ø¿¨
@@ -155,7 +156,7 @@ int Game::update(float dt)
 			moveable = false;
 		}
 	}
-	//?¼ì²âµØÍ¼±ß½ç
+	//¼ì²âµØÍ¼±ß½ç
 	Position pos = player->pos + player->velocity * dt;
 	if (pos.x < 0 || pos.y < 0 || pos.x + player->size.x > lvlWidth || pos.y + player->size.y > lvlHeight)
 	{
@@ -216,6 +217,7 @@ int Game::update(float dt)
 	{
 		if (it.obtainable && !it.activated && CheckCollision(*player, it))
 		{
+			SoundEngine->play2D("resource/sound/obtain.wav");
 			it.activated = true;
 			if (it.type == "FAST")
 			{
@@ -398,6 +400,18 @@ int Game::update(float dt)
 	return 0;
 }
 
+void Game::drawUI() {
+	for (int i = 0; i < lives; i++) {
+		ui->renderImage(ResourceManager::getTexture("Hull_02_A"), Position(90 + i * 25, 65), Size(15, 15));
+	}
+	ui->renderImage(ResourceManager::getTexture("TANKTU"), Position(40, 20), Size(80, 80));
+	ui->renderImage(ResourceManager::getTexture("KUANG"), Position(90, 40), Size(65, 20));
+	ui->renderImage(ResourceManager::getTexture("BLOOD"), Position(92, 44), Size(60 * (float(player->blood) / 1000), 12));
+	ui->renderText(to_string(player->blood), Position(100, 45), 0.7, Color(0));
+	ui->renderImage(ResourceManager::getTexture("Hull_02_A"), Position(680, 40), Size(40, 40));
+	ui->renderText(to_string(levels[level].tanks), Position(730, 50), 1.0);
+}
+
 int Game::render()
 {
 	levels[level].draw(*renderer);
@@ -429,9 +443,7 @@ int Game::render()
 	}
 
 	levels[level].drawTree(*renderer);
-	stringstream ss; ss << levels[level].tanks;
-	ui->renderText(ss.str(), Position(100, 100), 1.0);
-	ui->renderImage(ResourceManager::getTexture("TREE"), Position(100, 100), Size(100, 100));
+	this->drawUI();
 	return 0;
 }
 
@@ -513,7 +525,7 @@ bool isOtherBonusActivate(vector<Bonus>& bonusItem, string type)
 {
 	for (auto& it : bonusItem)
 	{
-		if (it.activated && it.type == type)
+		if (it.activated && !it.runout && it.type == type)
 			return true;
 	}
 	return false;

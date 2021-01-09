@@ -16,6 +16,7 @@ public:
 	void spawnBonus(GameObject& obj);
 	void updateBonus(float dt);
 	int render();
+	void drawUI();
 	void processInput(float dt);
 	bool keys[1024] = { false };
 	bool mouseKeys[5] = { false };
@@ -31,11 +32,11 @@ public:
 	vector<Tank> enemyTanks;
 	vector<GameLevel> levels;
 	vector<Bonus> bonusItems;
-	void drawUI();
 	unsigned int level;
 	unsigned int lvlHeight = 1000, lvlWidth = 1000;
 	Size viewSize;
 	Position camPostion;
+	int lives = 3;
 private:
 	const float FPS = 30;
 };
