@@ -17,7 +17,7 @@ Explosion::Explosion(Position pos, Size size, int damage) : GameObject(pos, size
 
 bool Explosion::draw(SpriteRenderer& renderer)
 {
-	renderer.drawSprite(textures[count], pos, size, rotation, rotateCenter);
+	renderer.drawSprite(textures[count], pos, size, rotation);
 	return false;
 }
 

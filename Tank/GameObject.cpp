@@ -20,6 +20,6 @@ void GameObject::addTexture(Texture texture)
     
 bool GameObject::draw(SpriteRenderer& renderer)
 {
-	renderer.drawSprite(textures[0], pos, size, rotation, rotateCenter);
+	renderer.drawSprite(textures[0], pos, size, rotation);
 	return false;
 }

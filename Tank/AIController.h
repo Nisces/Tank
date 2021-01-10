@@ -5,9 +5,9 @@
 
 using namespace std;
 
-//class AIController
-//{
-//public:
-//	static void AI(Game &game, float dt);
-//};
+class AIController
+{
+public:
+	static void AI(Game &game, float dt);
+};
 

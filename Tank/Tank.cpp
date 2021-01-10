@@ -7,15 +7,20 @@ Tank::Tank(Position pos, Size size, float speed, int blood) : GameObject(pos, si
 	this->textures.push_back(ResourceManager::getTexture("Hull_02_A"));
 	this->textures.push_back(ResourceManager::getTexture("Hull_02_B"));
 	this->textures.push_back(ResourceManager::getTexture("Gun_01"));
-	this->rotateCenter = glm::vec2(0.5 * size.x, 0.62 * size.y);
-	this->velocity = glm::vec2(0, 0);
+	this->textures.push_back(ResourceManager::getTexture("ARMORTANK"));
+	this->rotateCenter = Point(0.5 * size.x, 0.62 * size.y);
+	this->velocity = Velocity(0, 0);
 }
 
 
 bool Tank::draw(SpriteRenderer& renderer)
 {
-	renderer.drawSprite(this->textures[frame], pos, size, glm::radians(float(angle)), Point(-1, -1), attacked);
+	renderer.drawSprite(this->textures[frame], pos, size, glm::radians(float(angle)), this->armor ? 0 : attacked);
 	renderer.drawSprite(this->textures[2], pos, size, glm::radians(float(angle)), rotation - glm::radians(static_cast<float>(angle)), rotateCenter);
+	if (this->armor)
+	{
+		renderer.drawSprite(this->textures[3], Position(pos.x + size.x / 2 - 40, pos.y + size.y / 2 - 40), Size(80, 80), 0, attacked);
+	}
 	return true;
 }
 
@@ -48,7 +53,7 @@ void Tank::move(float dt)
 
 void Tank::turnTo(glm::vec2 pos)
 {
-	glm::vec2 center = this->pos + this->rotateCenter;
+	Point center = this->pos + this->rotateCenter;
 	float a = pos.x - center.x;
 	float b = pos.y - center.y;
 	float c = sqrt(a * a + b * b);

@@ -27,6 +27,6 @@ public:
 	float rotation;
 	Point rotateCenter;
 	vector<Texture> textures;
-	bool isEnemy;
+	bool isEnemy = false;
 };
 

@@ -135,6 +135,6 @@ bool Block::draw(SpriteRenderer& renderer)
 	int b = ceil(double(blood) / 250);
 	b = b < 0 ? 0 : b;
 	int index = 4 - b;
-	renderer.drawSprite(textures[index], pos, size, rotation, rotateCenter);
+	renderer.drawSprite(textures[index], pos, size, rotation);
 	return false;
 }
