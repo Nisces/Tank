@@ -9,5 +9,6 @@ class AIController
 {
 public:
 	static void AI(Game &game, float dt);
+	static void generateEnemy(Game& game, float dt);
 };
 

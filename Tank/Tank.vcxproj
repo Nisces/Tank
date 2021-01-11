@@ -104,6 +104,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <DisableSpecificWarnings>26812;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -142,6 +143,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="AIController.cpp" />
+    <ClCompile Include="AStar.cpp" />
     <ClCompile Include="Bonus.cpp" />
     <ClCompile Include="Bullet.cpp" />
     <ClCompile Include="BulletErase.cpp" />
@@ -162,6 +164,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AIController.h" />
+    <ClInclude Include="AStar.h" />
     <ClInclude Include="Bonus.h" />
     <ClInclude Include="Bullet.h" />
     <ClInclude Include="BulletErase.h" />

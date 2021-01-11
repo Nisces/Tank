@@ -44,14 +44,15 @@ void Game::init()
 	srand(unsigned int(time(NULL)));
 	//加载着色器
 	ResourceManager::loadShader("sprite.vs", "sprite.fs", nullptr, "sprite").use();
+	glm::mat4 view(1.0);
 	glm::mat4 projection = glm::ortho(0.0f, static_cast<float>(viewSize.x), static_cast<float>(viewSize.y), 0.0f, -1.0f, 1.0f);
+	ResourceManager::getShader("sprite").SetMatrix4("view", view);
 	ResourceManager::getShader("sprite").SetInteger("sprite", 0);
 	ResourceManager::getShader("sprite").SetMatrix4("projection", projection);
-	glm::mat4 view(1.0);
-	ResourceManager::getShader("sprite").SetMatrix4("view", view);
+
 
 	renderer = new SpriteRenderer(ResourceManager::getShader("sprite"));
-	ui = new UIRenderer(viewSize.x, viewSize.y);
+	ui = new UIRenderer(width, height);
 	ui->load("resource/fonts/OCRAEXT.TTF", 24);
 
 	//加载纹理贴图文件
@@ -99,7 +100,6 @@ void Game::init()
 	ResourceManager::loadTexture("resource/texture/Props/aigei_com.png", "TANKTU");
 
 
-
 	//加载关卡
 	GameLevel one; one.load("resource/levels/one2.lvl", lvlWidth, lvlHeight); one.tanks = 20;
 	GameLevel two; two.load("resource/levels/two.lvl", lvlWidth, lvlHeight); two.tanks = 20;
@@ -107,10 +107,10 @@ void Game::init()
 	this->levels.push_back(one);
 	this->levels.push_back(two);
 	this->levels.push_back(three);
-	this->level = 2;
+	this->level = 0;
 
 	//播放背景音乐
-	//SoundEngine->play2D("resource/sound/bgm.mp3", GL_TRUE);
+	SoundEngine->play2D("resource/sound/Start.mp3", GL_TRUE);
 
 	//初始化GameObjects
 	Tank tank(Position((levels[level].width / 2 - 4) * levels[level].unit_width, (levels[level].height - 1) * levels[level].unit_height),
@@ -123,58 +123,74 @@ void Game::init()
 double currentTime = glfwGetTime();
 double lastAttackTime = currentTime;
 double lastAnimeTime = currentTime;
-double lastEnemyTime = currentTime;
 double lastbeTime = currentTime;
+double dieTime = 0;
 
 void Game::resetPlayer()
 {
 	player->pos = Position((levels[level].width / 2 - 4) * levels[level].unit_width, (levels[level].height - 1) * levels[level].unit_height);
 	player->blood = 1000;
+	player->armor = false;
+	player->speed = 200;
 }
 
 void Game::resetLevel()
 {
-
+	const char* lvls[] = { "resource/levels/one2.lvl", "resource/levels/two.lvl", "resource/levels/three.lvl" };
+	levels[level].blocks.clear();
+	levels[level].tileData.clear();
+	this->levels[level].load(lvls[level], lvlWidth, lvlHeight); levels[level].tanks = 20;
+	this->lives = 3;
+	this->tanks.clear();
+	this->bonusItems.clear();
+	this->bullets.clear();
+	this->explosions.clear();
+	Tank tank(Position((levels[level].width / 2 - 4) * levels[level].unit_width, (levels[level].height - 1) * levels[level].unit_height),
+		Size(levels[level].unit_width - 5, levels[level].unit_height - 5));
+	tank.isEnemy = false;
+	tanks.insert(tanks.begin(), tank);
+	player = &tanks[0];
 }
 
 int Game::update(float dt)
 {
-	player = &tanks[0];
-	updateView();
 	currentTime = glfwGetTime();
-	//我方坦克移动
-	bool moveable = true;
-	for (Block& block : levels[level].blocks)
+	this->updateBonus(dt);
+	this->updateAnime();
+	AIController::generateEnemy(*this, dt);
+	AIController::AI(*this, dt);
+
+	if (this->state == GAME_ACTIVE)
 	{
-		if (!block.tankable && block.blood > 0 && CheckCollision(*player, block, player->velocity * dt)) //与砖块发生碰撞
+		this->updateView(*player);
+		player = &tanks[0];
+		//我方坦克移动
+		Position pos = player->pos + player->velocity * dt;
+		if (pos.x < 0 || pos.y < 0 || pos.x + player->size.x > lvlWidth || pos.y + player->size.y > lvlHeight)//检测地图边界
 		{
-			Velocity v(0, 0);
-			if (player->dir == Direction::UL || player->dir == Direction::UR || player->dir == Direction::DL || player->dir == Direction::DR)
-			{
-				if (!CheckCollision(*player, block, Velocity(0, player->velocity.y) * dt))
-				{
-					v.y = player->velocity.y;
-				}
-				if (!CheckCollision(*player, block, Velocity(player->velocity.x, 0) * dt))
-				{
-					v.x = player->velocity.x;
-				}
-			}
-			player->velocity = v;
+			player->velocity = Velocity(0, 0);
 		}
-	}
-
-	//检测地图边界
-	Position pos = player->pos + player->velocity * dt;
-	if (pos.x < 0 || pos.y < 0 || pos.x + player->size.x > lvlWidth || pos.y + player->size.y > lvlHeight)
-	{
-		player->velocity = Velocity(0, 0);
-	}
-
-
-	static bool moveSound = false;
-	if (moveable)
-	{
+		for (Block& block : levels[level].blocks)
+		{
+			if (!block.tankable && block.blood > 0 && CheckCollision(*player, block, player->velocity * dt)) //与砖块发生碰撞
+			{
+				Velocity v(0, 0);
+				if (player->dir == Direction::UL || player->dir == Direction::UR || player->dir == Direction::DL || player->dir == Direction::DR)
+				{
+					if (!CheckCollision(*player, block, Velocity(0, player->velocity.y) * dt))
+					{
+						v.y = player->velocity.y;
+					}
+					if (!CheckCollision(*player, block, Velocity(player->velocity.x, 0) * dt))
+					{
+						v.x = player->velocity.x;
+					}
+				}
+				player->velocity = v;
+			}
+		}
+		//播放坦克移动音效
+		static bool moveSound = false;
 		player->move(dt);
 		static ISound* snd;
 		if (!moveSound && !player->stop)
@@ -185,7 +201,6 @@ int Game::update(float dt)
 		if (player->stop)
 		{
 			moveSound = false;
-
 			if (snd)
 			{
 				snd->stop();
@@ -193,113 +208,82 @@ int Game::update(float dt)
 				snd = 0;
 			}
 		}
-	}
 
-	for (auto it = tanks.begin(); it != tanks.end(); it++)
-	{
-		if (it->attacked == 1 && currentTime - lastAttackTime > 0.05)
+		//玩家与道具的碰撞检测 - 获得道具
+		for (auto& it : this->bonusItems)
 		{
-			it->attacked = 0;
-		}
-	}
-
-	//生成新敌人
-	if (currentTime - lastEnemyTime > 5 && tanks.size() < 6 && levels[level].tanks > 0)
-	{
-		int base = rand() % levels[level].tankBase.size();
-		Tank enemy(levels[level].tankBase[base].pos, Size(levels[level].unit_width - 5, levels[level].unit_height - 5));
-		enemy.changeDir(Direction(rand() % 8));
-		enemy.isEnemy = true;
-		tanks.push_back(enemy);
-		lastEnemyTime = currentTime;
-		levels[level].tanks--;
-	}
-
-	AIController::AI(*this, dt);
-
-	//玩家与道具的碰撞检测 - 获得道具
-	for (auto& it : this->bonusItems)
-	{
-		if (it.obtainable && !it.activated && CheckCollision(*player, it))
-		{
-			SoundEngine->play2D("resource/sound/obtain.wav");
-			it.activated = true;
-			if (it.type == "FAST")
+			if (it.obtainable && !it.activated && CheckCollision(*player, it))
 			{
-				player->speed = 250;
-			}
-			else if (it.type == "BLOOD")
-			{
-				player->blood = 1000;
-			}
-			else if (it.type == "ARMOR")
-			{
-				player->armor = true;
+				SoundEngine->play2D("resource/sound/obtain.wav");
+				it.activated = true;
+				if (it.type == "FAST")
+				{
+					player->speed = 250;
+				}
+				else if (it.type == "BLOOD")
+				{
+					player->blood = 1000;
+				}
+				else if (it.type == "ARMOR")
+				{
+					player->armor = true;
+				}
 			}
 		}
 	}
-	this->updateBonus(dt);
 
 	//子弹飞行过程及碰撞检测
 	for (auto it = bullets.begin(); it != bullets.end();)
 	{
 		bool hitTank = false;  //击中坦克
 		bool hitBlock = false; //击中地图物体
-		for (auto t = tanks.begin(); t != tanks.end(); t++)
+		for (auto tank = tanks.begin(); !hitTank && !hitBlock && tank != tanks.end(); ++tank)
 		{
-			if ((it->isEnemy ^ t->isEnemy) && CheckCollision(*it, *t)) //异或操作，坦克的敌人属性和子弹的敌人属性不一样
+			if ((it->isEnemy ^ tank->isEnemy) && CheckCollision(*it, *tank)) //异或操作，坦克的敌人属性和子弹的敌人属性不一样
 			{
 				hitTank = true;
-				if (!t->armor)
+				if (!tank->armor)
 				{
-					t->blood -= it->damage;
+					tank->blood -= it->damage;
 				}
-				t->attacked = 1;
+				tank->attacked = 1;
 				lastAttackTime = currentTime;
 				SoundEngine->play2D("resource/sound/GetHurt.wav", GL_FALSE);
-				if (t->blood <= 0)
+				if (tank->blood <= 0)
 				{
-					SoundEngine->play2D("resource/sound/Explosion.wav", GL_FALSE);
-					explosions.push_back(Explosion(t->pos + Size(t->size.x / 2, t->size.y / 2) - Size(100 / 2, 100 / 2), Size(100, 100)));
-					if (player->blood <= 0)
+					SoundEngine->play2D("resource/sound/explosion.wav", GL_FALSE);
+					if (!(player->blood <= 0 && this->state == PLAYER_DIE))
+						explosions.push_back(Explosion(tank->pos + Size(tank->size.x / 2, tank->size.y / 2) - Size(100 / 2, 100 / 2), Size(100, 100)));
+					if (!(*tank == *player))
 					{
-						resetPlayer();
-					}
-					else
-					{
-						this->spawnBonus(*t);   //随机生成道具  加入到bonusItem列表中
-						t = tanks.erase(t);
+						this->spawnBonus(*tank);   //随机生成道具  加入到bonusItem列表中
+						tank = tanks.erase(tank);
 					}
 				}
-				break;
 			}
 		}
-		for (auto& block : levels[level].blocks)
+		for (auto block = levels[level].blocks.begin(); !hitTank && !hitBlock && block != levels[level].blocks.end(); block++)
 		{
-			if (!block.bulletable && block.blood > 0 && CheckCollision(*it, block))
+			if (!block->bulletable && block->blood > 0 && CheckCollision(*it, *block))
 			{
 				hitBlock = true;
 				SoundEngine->play2D("resource/sound/GetHurt.wav", GL_FALSE);
-				if (block.breakable)
+				if (block->breakable)
 				{
-					block.blood -= it->damage;
-					if (block.blood <= 0)
+					block->blood -= it->damage;
+					if (block->blood <= 0 && (block->type == BOMBT || block->type == BASE))
 					{
-						if (block.type == BOMBT)
-						{
-							SoundEngine->play2D("resource/sound/Explosion.wav", GL_FALSE);
-							explosions.push_back(Explosion(block.pos + Size(block.size.x / 2, block.size.y / 2) - Size(100 / 2, 100 / 2), Size(100, 100), 500));
-						}
+						SoundEngine->play2D("resource/sound/explosion1.wav", GL_FALSE);
+						explosions.push_back(Explosion(block->pos + Size(block->size.x / 2, block->size.y / 2) - Size(100 / 2, 100 / 2), Size(100, 100), 1000));
 					}
 				}
-				break;
 			}
 		}
 		if (hitTank || hitBlock)
 		{
 			bulleterase.push_back(BulletErase(it->pos + Size(it->size.x / 2, it->size.y / 2) - Size(50 / 2, 50 / 2), Size(50, 50), it->rotation));
 		}
-		if (hitTank || hitBlock || it->biu(dt, glm::vec2(lvlWidth, lvlHeight)))
+		if (hitTank || hitBlock || it->biu(dt, Size(lvlWidth, lvlHeight)))
 		{
 			it = bullets.erase(it);
 		}
@@ -313,7 +297,7 @@ int Game::update(float dt)
 	//更新爆炸过程，应用爆炸伤害
 	for (auto& explosion : explosions)
 	{
-		if (explosion.count == 1 || explosion.damage != 0)
+		if (explosion.count == 1 && explosion.damage != 0)
 		{
 			for (auto& block : levels[level].blocks)
 			{
@@ -326,7 +310,7 @@ int Game::update(float dt)
 						{
 							if (block.type == BOMBT)
 							{
-								SoundEngine->play2D("resource/sound/Explosion.wav", GL_FALSE);
+								SoundEngine->play2D("resource/sound/explosion1.wav", GL_FALSE);
 								explosions.push_back(Explosion(block.pos + Size(block.size.x / 2, block.size.y / 2) - Size(100 / 2, 100 / 2), Size(100, 100), 500));
 							}
 						}
@@ -334,7 +318,7 @@ int Game::update(float dt)
 				}
 			}
 			//检查 炸药爆炸 和坦克
-			for (auto it = this->tanks.begin(); it != this->tanks.end(); ++it)
+			for (auto it = this->tanks.begin(); it != this->tanks.end() && !this->tanks.empty(); ++it)
 			{
 				if (CheckCollision(explosion, *it))
 				{
@@ -344,12 +328,9 @@ int Game::update(float dt)
 					}
 					if (it->blood <= 0)
 					{
-						explosions.push_back(Explosion(it->pos + Size(it->size.x / 2, it->size.y / 2) - Size(100 / 2, 100 / 2), Size(100, 100)));
-						if (player->blood <= 0)
-						{
-							resetPlayer();
-						}
-						else
+						if (!(player->blood <= 0 && this->state == PLAYER_DIE))
+							explosions.push_back(Explosion(it->pos + Size(it->size.x / 2, it->size.y / 2) - Size(100 / 2, 100 / 2), Size(100, 100)));
+						if (!(*it == *player))
 						{
 							this->spawnBonus(*it);   //随机生成道具  加入到bonusItem列表中
 							it = tanks.erase(it);
@@ -357,208 +338,42 @@ int Game::update(float dt)
 					}
 				}
 			}
+			explosion.damage = 0;  //炸药桶只能作用一次，之后失效
 		}
-		if (currentTime - lastAnimeTime > 0.03)
+	}
+
+	//判断各种游戏状态
+	if (levels[level].blocks[0].blood <= 0)
+	{
+		state = GAME_OVER;
+		this->updateView(levels[level].blocks[0]);
+	}
+	if (player->blood <= 0)
+	{
+		if (this->state != PLAYER_DIE && this->state != GAME_OVER)
 		{
-			explosion.count++;
-		}
-	}
-	this->explosions.erase(std::remove_if(this->explosions.begin(), this->explosions.end(),
-		[](const Explosion& explosion) { return explosion.count >= 8; }
-	), this->explosions.end());
-
-	for (auto& be : bulleterase)
-	{
-		if (currentTime - lastbeTime > 0.04)
-		{
-			be.count++;
-		}
-	}
-	this->bulleterase.erase(std::remove_if(this->bulleterase.begin(), this->bulleterase.end(),
-		[](const BulletErase& be) { return be.count >= 2; }
-	), this->bulleterase.end());
-
-	if (currentTime - lastAnimeTime > 0.03)
-	{
-		lastAnimeTime = currentTime;
-	}
-	if (currentTime - lastbeTime > 0.04)
-	{
-		lastbeTime = currentTime;
-	}
-
-	return 0;
-}
-
-//更新摄像机镜头视角
-void Game::updateView()
-{
-	Point center = player->pos + player->size * Size(0.5, 0.5);
-	if (center.x < viewSize.x / 2)
-	{
-		camPostion.x = 0;
-	}
-	else if (center.x > lvlWidth - viewSize.x / 2)
-	{
-		camPostion.x = lvlWidth - viewSize.x;
-	}
-	else
-	{
-		camPostion.x = center.x - viewSize.x / 2;
-	}
-
-	if (center.y < viewSize.y / 2)
-	{
-		camPostion.y = 0;
-	}
-	else if (center.y > lvlHeight - viewSize.y / 2)
-	{
-		camPostion.y = lvlHeight - viewSize.y;
-	}
-	else
-	{
-		camPostion.y = center.y - viewSize.y / 2;
-	}
-	glm::mat4 view;
-	glm::vec3 cameraPos = glm::vec3(camPostion, 0);
-	glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-	glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
-	view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-	ResourceManager::getShader("sprite").SetMatrix4("view", view, true);
-}
-
-void Game::drawUI() {
-	for (int i = 0; i < lives; i++) {
-		ui->renderImage(ResourceManager::getTexture("Hull_02_A"), Position(90 + i * 25, 65), Size(15, 15));
-	}
-	ui->renderImage(ResourceManager::getTexture("TANKTU"), Position(40, 20), Size(80, 80));
-	ui->renderImage(ResourceManager::getTexture("KUANG"), Position(90, 40), Size(100, 20));
-	ui->renderImage(ResourceManager::getTexture("HP"), Position(92, 44), Size(95 * (float(player->blood) / 1000), 12));
-	ui->renderText(to_string(player->blood), Position(100, 45), 0.7, Color(0));
-	ui->renderImage(ResourceManager::getTexture("Hull_02_A"), Position(680, 40), Size(40, 40));
-	ui->renderText(to_string(levels[level].tanks), Position(730, 50), 1.0);
-	float time[2] = { 0,0 };
-	for (Bonus& b : bonusItems) {
-		if (b.activated) {
-			if (b.type == "FAST")
+			state = PLAYER_DIE;
+			dieTime = currentTime;
+			--this->lives;
+			if (this->lives == 0)
 			{
-				time[0] = (time[0] > b.validTime) ? time[0] : b.validTime;
-			}
-			else if (b.type == "ARMOR")
-			{
-
-				time[1] = (time[1] > b.validTime) ? time[1] : b.validTime;
+				state = GAME_OVER;
 			}
 		}
 	}
-	if (time[0])
+	else if ((tanks.size() == 1) && (levels[level].tanks == 0))
 	{
-		ui->renderImage(ResourceManager::getTexture("FAST"), Position(40, 80), Size(40, 40));
-		ui->renderText(to_string(int(time[0])), Position(80, 90), 1.0);
-		if (time[1])
-		{
-			ui->renderImage(ResourceManager::getTexture("ARMOR"), Position(40, 120), Size(40, 40));
-			ui->renderText(to_string(int(time[1])), Position(80, 130), 1.0);
-		}
-	}
-	else if (time[1])
-	{
-		ui->renderImage(ResourceManager::getTexture("ARMOR"), Position(40, 80), Size(40, 40));
-		ui->renderText(to_string(int(time[1])), Position(80, 90), 1.0);
-	}
-}
-
-int Game::render()
-{
-	levels[level].draw(*renderer);
-	for (auto& t : tanks)
-	{
-		t.draw(*renderer);
+		state = GAME_WIN;
 	}
 
-	for (int i = 0; i < bullets.size(); ++i)
+	if (this->state == PLAYER_DIE && currentTime - dieTime > 1)
 	{
-		bullets[i].draw(*renderer);
+		this->state = GAME_ACTIVE;
+		this->resetPlayer();
 	}
-	for (int i = 0; i < explosions.size(); ++i)
-	{
-		explosions[i].draw(*renderer);
-	}
-	for (int i = 0; i < bulleterase.size(); ++i)
-	{
-		bulleterase[i].draw(*renderer);
-	}
-
-	for (auto& it : this->bonusItems)
-	{
-		if (it.obtainable && !it.outoftime && !it.activated)  //画出 还没过时且未被激活的道具
-		{
-			it.draw(*renderer);
-		}
-	}
-
-	levels[level].drawTree(*renderer);
-	this->drawUI();
 	return 0;
 }
 
-
-double lastProcessTime = currentTime;
-void Game::processInput(float dt)
-{
-	if (keys[GLFW_KEY_W] && keys[GLFW_KEY_A])
-	{
-		player->changeDir(Direction::UL);
-	}
-	else if (keys[GLFW_KEY_W] && keys[GLFW_KEY_D])
-	{
-		player->changeDir(Direction::UR);
-	}
-	else if (keys[GLFW_KEY_S] && keys[GLFW_KEY_A])
-	{
-		player->changeDir(Direction::DL);
-	}
-	else if (keys[GLFW_KEY_S] && keys[GLFW_KEY_D])
-	{
-		player->changeDir(Direction::DR);
-	}
-	else if (keys[GLFW_KEY_W])
-	{
-		player->changeDir(Direction::UP);
-	}
-	else if (keys[GLFW_KEY_S])
-	{
-		player->changeDir(Direction::DOWN);
-	}
-	else if (keys[GLFW_KEY_A])
-	{
-		player->changeDir(Direction::LEFT);
-	}
-	else if (keys[GLFW_KEY_D])
-	{
-		player->changeDir(Direction::RIGHT);
-	}
-	else
-	{
-		player->stop = true;
-	}
-	if (mouseKeys[GLFW_MOUSE_BUTTON_LEFT])
-	{
-		if (!mouseKeysProcessed[GLFW_MOUSE_BUTTON_LEFT] || currentTime - lastProcessTime > 0.2)
-		{
-			Point center = player->pos + Size(player->size.x / 2, player->size.y / 2);
-			Position pos(center.x + 0.65 * player->size.y * sin(player->rotation), center.y - 0.65 * player->size.y * cos(player->rotation));
-			Bullet bullet(pos, player->rotation);
-			bullet.isEnemy = false;
-			bullets.push_back(bullet);
-			SoundEngine->play2D("resource/sound/Fire.wav", GL_FALSE);
-			mouseKeysProcessed[GLFW_MOUSE_BUTTON_LEFT] = true;
-			lastProcessTime = currentTime;
-		}
-	}
-
-	player->turnTo(mousePos / Size(width, height) * viewSize + camPostion);
-}
 
 bool randomSpawn(unsigned int chance)
 {
@@ -569,11 +384,11 @@ bool randomSpawn(unsigned int chance)
 //产生道具
 void Game::spawnBonus(GameObject& obj)
 {
-	if (randomSpawn(3))
+	if (randomSpawn(10))
 		this->bonusItems.push_back(Bonus("FAST", obj.pos, glm::vec2(50, 50)));
-	else if (randomSpawn(3))
+	if (randomSpawn(10))
 		this->bonusItems.push_back(Bonus("BLOOD", obj.pos, glm::vec2(50, 50)));
-	else if (randomSpawn(3))
+	if (randomSpawn(10))
 		this->bonusItems.push_back(Bonus("ARMOR", obj.pos, glm::vec2(50, 50)));
 }
 
@@ -647,6 +462,255 @@ void Game::updateBonus(float dt)
 		else
 		{
 			++it;
+		}
+	}
+}
+
+
+//更新帧动画
+void Game::updateAnime()
+{
+	if (currentTime - lastAttackTime > 0.05)
+	{
+		for (auto it = tanks.begin(); it != tanks.end(); it++)
+		{
+			if (it->attacked == 1)
+			{
+				it->attacked = 0;
+			}
+		}
+	}
+
+
+	bool update = currentTime - lastAnimeTime > 0.03;
+	if (update)
+	{
+		for (auto& explosion : explosions)
+		{
+			explosion.count++;
+		}
+		for (auto& be : bulleterase)
+		{
+			be.count++;
+		}
+		lastAnimeTime = currentTime;
+	}
+
+	this->explosions.erase(std::remove_if(this->explosions.begin(), this->explosions.end(),
+		[](const Explosion& explosion) { return explosion.count >= 8; }
+	), this->explosions.end());
+
+
+	this->bulleterase.erase(std::remove_if(this->bulleterase.begin(), this->bulleterase.end(),
+		[](const BulletErase& be) { return be.count >= 2; }
+	), this->bulleterase.end());
+}
+
+//更新摄像机镜头视角
+void Game::updateView(GameObject &obj)
+{
+	Point center = obj.pos + obj.size * Size(0.5, 0.5);
+	if (center.x < viewSize.x / 2)
+	{
+		camPostion.x = 0;
+	}
+	else if (center.x > lvlWidth - viewSize.x / 2)
+	{
+		camPostion.x = lvlWidth - viewSize.x;
+	}
+	else
+	{
+		camPostion.x = center.x - viewSize.x / 2;
+	}
+
+	if (center.y < viewSize.y / 2)
+	{
+		camPostion.y = 0;
+	}
+	else if (center.y > lvlHeight - viewSize.y / 2)
+	{
+		camPostion.y = lvlHeight - viewSize.y;
+	}
+	else
+	{
+		camPostion.y = center.y - viewSize.y / 2;
+	}
+	glm::mat4 view;
+	glm::vec3 cameraPos = glm::vec3(camPostion, 0);
+	glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+	glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+	view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+	ResourceManager::getShader("sprite").SetMatrix4("view", view, true);
+}
+
+//绘制UI
+void Game::drawUI()
+{
+	for (int i = 0; i < lives; i++)
+	{
+		ui->renderImage(ResourceManager::getTexture("Hull_02_A"), Position(90 + i * 40, 90), Size(25, 25));
+	}
+	ui->renderImage(ResourceManager::getTexture("TANKTU"), Position(20, 20), Size(100, 100));
+	ui->renderImage(ResourceManager::getTexture("KUANG"), Position(90, 40), Size(200, 40));
+	if (player->blood < 0) player->blood = 0;
+	ui->renderImage(ResourceManager::getTexture("HP"), Position(96, 48), Size(190 * (float(player->blood) / 1000), 24));
+	ui->renderText(to_string(player->blood), Position(160, 53), 1.0, Color(0));
+	ui->renderImage(ResourceManager::getTexture("Hull_02_A"), Position(1080, 40), Size(40, 40));
+	ui->renderText(to_string(levels[level].tanks + this->tanks.size() - 1), Position(1130, 50), 1.0);
+	float time[2] = { 0,0 };
+	for (Bonus& b : bonusItems) {
+		if (b.activated) {
+			if (b.type == "FAST")
+			{
+				time[0] = (time[0] > b.validTime) ? time[0] : b.validTime;
+			}
+			else if (b.type == "ARMOR")
+			{
+				time[1] = (time[1] > b.validTime) ? time[1] : b.validTime;
+			}
+		}
+	}
+	if (time[0])
+	{
+		ui->renderImage(ResourceManager::getTexture("FAST"), Position(35, 120), Size(60, 60));
+		ui->renderText(to_string(int(time[0])), Position(95, 140), 1.0);
+		if (time[1])
+		{
+			ui->renderImage(ResourceManager::getTexture("ARMOR"), Position(35, 180), Size(60, 60));
+			ui->renderText(to_string(int(time[1])), Position(95, 200), 1.0);
+		}
+	}
+	else if (time[1])
+	{
+		ui->renderImage(ResourceManager::getTexture("ARMOR"), Position(35, 120), Size(60, 60));
+		ui->renderText(to_string(int(time[1])), Position(95, 140), 1.0);
+	}
+
+	if (state == GAME_OVER)
+	{
+		ui->renderText("GAME OVER", Position(500, 400), 1.5);
+		ui->renderText("press R to restart", Position(460, 450), 1.0);
+	}
+	else if (state == GAME_WIN)
+	{
+		ui->renderText("YOU WIN", Position(500, 400), 1.5);
+		ui->renderText("press ENTER to continue", Position(440, 450), 1.0);
+	}
+}
+
+//渲染
+int Game::render()
+{
+	levels[level].draw(*renderer);
+	for (int i = 0; i < tanks.size(); i++)
+	{
+		if (i == 0 && this->state == PLAYER_DIE)
+		{
+			continue;
+		}
+		tanks[i].draw(*renderer);
+	}
+
+	for (int i = 0; i < bullets.size(); ++i)
+	{
+		bullets[i].draw(*renderer);
+	}
+	for (int i = 0; i < explosions.size(); ++i)
+	{
+		explosions[i].draw(*renderer);
+	}
+	for (int i = 0; i < bulleterase.size(); ++i)
+	{
+		bulleterase[i].draw(*renderer);
+	}
+
+	for (auto& it : this->bonusItems)
+	{
+		if (it.obtainable && !it.outoftime && !it.activated)  //画出 还没过时且未被激活的道具
+		{
+			it.draw(*renderer);
+		}
+	}
+	levels[level].drawTree(*renderer);
+	this->drawUI();
+	return 0;
+}
+
+//处理输入
+double lastProcessTime = currentTime;
+void Game::processInput(float dt)
+{
+	if (state == GAME_ACTIVE)
+	{
+		if (keys[GLFW_KEY_W] && keys[GLFW_KEY_A])
+		{
+			player->changeDir(Direction::UL);
+		}
+		else if (keys[GLFW_KEY_W] && keys[GLFW_KEY_D])
+		{
+			player->changeDir(Direction::UR);
+		}
+		else if (keys[GLFW_KEY_S] && keys[GLFW_KEY_A])
+		{
+			player->changeDir(Direction::DL);
+		}
+		else if (keys[GLFW_KEY_S] && keys[GLFW_KEY_D])
+		{
+			player->changeDir(Direction::DR);
+		}
+		else if (keys[GLFW_KEY_W])
+		{
+			player->changeDir(Direction::UP);
+		}
+		else if (keys[GLFW_KEY_S])
+		{
+			player->changeDir(Direction::DOWN);
+		}
+		else if (keys[GLFW_KEY_A])
+		{
+			player->changeDir(Direction::LEFT);
+		}
+		else if (keys[GLFW_KEY_D])
+		{
+			player->changeDir(Direction::RIGHT);
+		}
+		else
+		{
+			player->stop = true;
+		}
+		if (mouseKeys[GLFW_MOUSE_BUTTON_LEFT])
+		{
+			if (!mouseKeysProcessed[GLFW_MOUSE_BUTTON_LEFT] || currentTime - lastProcessTime > 0.2)
+			{
+				Point center = player->pos + Size(player->size.x / 2, player->size.y / 2);
+				Position pos(center.x + 0.65 * player->size.y * sin(player->rotation), center.y - 0.65 * player->size.y * cos(player->rotation));
+				Bullet bullet(pos, player->rotation);
+				bullet.isEnemy = false;
+				bullets.push_back(bullet);
+				SoundEngine->play2D("resource/sound/Fire.wav", GL_FALSE);
+				mouseKeysProcessed[GLFW_MOUSE_BUTTON_LEFT] = true;
+				lastProcessTime = currentTime;
+			}
+		}
+		player->turnTo(mousePos / Size(width, height) * viewSize + camPostion);
+	}
+	else if (state == GAME_OVER)
+	{
+		if (this->keys[GLFW_KEY_R])
+		{
+			this->resetLevel();
+			this->resetPlayer();
+			this->state = GAME_ACTIVE;
+		}
+	}
+	else if (state == GAME_WIN)
+	{
+		if (this->keys[GLFW_KEY_ENTER])
+		{
+			this->level = (this->level + 1) % 3;
+			this->resetLevel();
+			this->resetPlayer();
+			this->state = GAME_ACTIVE;
 		}
 	}
 }

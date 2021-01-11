@@ -5,6 +5,12 @@
 #include "Explosion.h"
 #include "BulletErase.h"
 #include "Bonus.h"
+#include "AStar.h"
+
+enum GameState 
+{
+	GAME_ACTIVE, GAME_MENU, GAME_OVER, GAME_WIN, PLAYER_DIE
+};
 
 class Game
 {
@@ -13,9 +19,10 @@ public:
 	~Game();
 	void init();
 	int update(float dt);
+	void updateAnime();
 	void spawnBonus(GameObject& obj);
 	void updateBonus(float dt);
-	void updateView();
+	void updateView(GameObject& obj);
 	int render();
 	void drawUI();
 	void processInput(float dt);
@@ -23,6 +30,7 @@ public:
 	void resetLevel();
 
 public:
+	GameState state;
 	bool keys[1024] = { false };
 	bool mouseKeys[5] = { false };
 	bool mouseKeysProcessed[5] = { false };

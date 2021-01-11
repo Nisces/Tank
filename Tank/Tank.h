@@ -15,8 +15,9 @@ public:
 	void move(float dt);
 	void turnTo(glm::vec2 pos);
 	void changeDir(Direction dir);
-	Direction dir;
 public:
+	Point rotateCenter;
+	Direction dir;
 	int angle;
 	float speed;
 	int blood;
