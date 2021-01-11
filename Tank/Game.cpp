@@ -189,6 +189,14 @@ int Game::update(float dt)
 				player->velocity = v;
 			}
 		}
+		for (auto t : this->tanks)
+		{
+			if (!(t == *player) && CheckCollision(*player, t, player->velocity))
+			{
+				player->velocity = Velocity(0, 0);
+			}
+		}
+
 		//播放坦克移动音效
 		static bool moveSound = false;
 		player->move(dt);
@@ -237,8 +245,9 @@ int Game::update(float dt)
 	{
 		bool hitTank = false;  //击中坦克
 		bool hitBlock = false; //击中地图物体
-		for (auto tank = tanks.begin(); !hitTank && !hitBlock && tank != tanks.end(); ++tank)
+		for (auto tank = tanks.begin(); !hitTank && !hitBlock && tank != tanks.end();)
 		{
+			bool erase = false;
 			if ((it->isEnemy ^ tank->isEnemy) && CheckCollision(*it, *tank)) //异或操作，坦克的敌人属性和子弹的敌人属性不一样
 			{
 				hitTank = true;
@@ -258,9 +267,11 @@ int Game::update(float dt)
 					{
 						this->spawnBonus(*tank);   //随机生成道具  加入到bonusItem列表中
 						tank = tanks.erase(tank);
+						erase = true;
 					}
 				}
 			}
+			if (!erase) ++tank;
 		}
 		for (auto block = levels[level].blocks.begin(); !hitTank && !hitBlock && block != levels[level].blocks.end(); block++)
 		{
@@ -311,15 +322,16 @@ int Game::update(float dt)
 							if (block.type == BOMBT)
 							{
 								SoundEngine->play2D("resource/sound/explosion1.wav", GL_FALSE);
-								explosions.push_back(Explosion(block.pos + Size(block.size.x / 2, block.size.y / 2) - Size(100 / 2, 100 / 2), Size(100, 100), 500));
+								explosions.push_back(Explosion(block.pos + Size(block.size.x / 2, block.size.y / 2) - Size(100 / 2, 100 / 2), Size(100, 100), 1000));
 							}
 						}
 					}
 				}
 			}
 			//检查 炸药爆炸 和坦克
-			for (auto it = this->tanks.begin(); it != this->tanks.end() && !this->tanks.empty(); ++it)
+			for (auto it = this->tanks.begin(); it != this->tanks.end() && !this->tanks.empty();)
 			{
+				bool erase = false;
 				if (CheckCollision(explosion, *it))
 				{
 					if (!it->armor)
@@ -334,9 +346,11 @@ int Game::update(float dt)
 						{
 							this->spawnBonus(*it);   //随机生成道具  加入到bonusItem列表中
 							it = tanks.erase(it);
+							erase = true;
 						}
 					}
 				}
+				if (!erase) ++it;
 			}
 			explosion.damage = 0;  //炸药桶只能作用一次，之后失效
 		}
@@ -507,7 +521,7 @@ void Game::updateAnime()
 }
 
 //更新摄像机镜头视角
-void Game::updateView(GameObject &obj)
+void Game::updateView(GameObject& obj)
 {
 	Point center = obj.pos + obj.size * Size(0.5, 0.5);
 	if (center.x < viewSize.x / 2)
